@@ -38,24 +38,28 @@ class ClientHandle:
             fileSize = self.conn.recv(PACK_SIZE)
             file = self.checkFileExists(fileName, fileSize, fileHash)
             if file is None:
-                file = File.File(fileName)
-                file.create(fileSize, fileHash, PACK_SIZE)
+                file = File.File(fileName, PACK_SIZE)
+                file.create(fileSize, fileHash)
                 self.files[file.fileHash] = file
+            file.sendState(self.conn)
             if not file.isFileComplete():
-                file.sendState(self.conn)
                 file.reciveFile(self.conn)
                 file.finishRecive()
 
     def sendFiles(self):
-        pass
+        for f in self.args.getFiles():
+            file = File.File(f,PACK_SIZE)
+            self.conn.send(file.fileHash)
+            self.conn.send(file.fileName)
+            self.conn.send()
 
     def checkFileExists(self, fileName, fileSize, fileHash):
         return self.files[fileHash]
 
     def initFiles(self):
-        files = [File.File(f) for f in os.listdir('.') if os.path.isfile(f)]
+        files = [File.File(f,PACK_SIZE) for f in os.listdir('.') if os.path.isfile(f)]
         for f in files:
-            f.load(PACK_SIZE)
+            f.load()
             self.files[f.fileHash] = f
 
     def panic(self):
