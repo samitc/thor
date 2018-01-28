@@ -85,3 +85,12 @@ class File:
 
     def isFileComplete(self):
         return self.isFinished
+
+    def sendFile(self, conn):
+        filePart=conn.recv(self.PACK_SIZE)
+        maxPart=self.fileSize/self.PACK_SIZE+1
+        if  filePart<maxPart:
+            with open(self.fileName,'rb') as file:
+                file.seek(filePart*self.PACK_SIZE)
+                data=file.read(self.PACK_SIZE)
+                conn.send(data)

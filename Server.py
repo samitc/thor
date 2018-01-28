@@ -48,16 +48,18 @@ class ClientHandle:
 
     def sendFiles(self):
         for f in self.args.getFiles():
-            file = File.File(f,PACK_SIZE)
+            file = File.File(f, PACK_SIZE)
             self.conn.send(file.fileHash)
             self.conn.send(file.fileName)
-            self.conn.send()
+            self.conn.send(file.fileSize)
+            file.sendFile(self.conn)
+        self.conn.send(ZERO_HASH)
 
     def checkFileExists(self, fileName, fileSize, fileHash):
         return self.files[fileHash]
 
     def initFiles(self):
-        files = [File.File(f,PACK_SIZE) for f in os.listdir('.') if os.path.isfile(f)]
+        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if os.path.isfile(f)]
         for f in files:
             f.load()
             self.files[f.fileHash] = f
