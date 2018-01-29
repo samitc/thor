@@ -1,6 +1,9 @@
 import os
 from Hash import Hash
 import pickle
+import Util
+import ntpath
+import math
 
 
 class FileData:
@@ -15,6 +18,7 @@ class File:
         self.fileName = fileName
         self.isFinished = False
         self.PACK_SIZE = PACK_SIZE
+        self.fileData = None
 
     def load(self):
         if not self.loadFileData():
@@ -22,23 +26,30 @@ class File:
             BUF_SIZE = 65536
             self.fileSize = 0
             with open(self.fileName, 'rb') as f:
-                data = f.read(BUF_SIZE)
-                h.update(data)
-                self.fileSize += len(data)
+                while True:
+                    data = f.read(BUF_SIZE)
+                    if not data:
+                        break
+                    h.update(data)
+                    self.fileSize += len(data)
             self.fileHash = h.calculateHash()
             self.isFinished = True
-            self.partNumber = self.fileSize / self.PACK_SIZE + 1
+            self.partNumber = math.ceil(self.fileSize / self.PACK_SIZE)
 
     def checkIfFileCurrect(self):
         h = Hash()
         BUF_SIZE = 65536
         with open(self.fileName, 'rb') as f:
-            data = f.read(BUF_SIZE)
-            h.update(data)
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                h.update(data)
         fileHash = h.calculateHash()
         return self.fileHash == fileHash
 
     def create(self, fileSize, fileHash):
+        self.fileName = ntpath.basename(self.fileName)
         if not self.loadFileData():
             self.fileHash = fileHash
             self.fileSize = fileSize
@@ -48,37 +59,47 @@ class File:
             pickle.dump(FileData(fileHash, fileSize, 0), self.fileData, pickle.HIGHEST_PROTOCOL)
 
     def save(self):
-        if not self.isFinished:
-            pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber), self.fileData, pickle.HIGHEST_PROTOCOL)
+        if self.fileData is not None:
+            if not self.isFinished:
+                pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber), self.fileData,
+                            pickle.HIGHEST_PROTOCOL)
+
+    def panic(self):
+        if self.fileData is not None:
+            self.save()
+            self.fileData.close()
 
     def sendState(self, conn):
-        conn.send(self.partNumber)
+        conn.send(Util.sendInt(self.partNumber))
+        Util.send(conn)
 
     def reciveFile(self, conn):
         with open(self.fileName, 'ab') as file:
-            for _ in range(self.fileSize / self.PACK_SIZE + 1):
+            for _ in range(int(math.ceil(self.fileSize / self.PACK_SIZE))):
                 data = conn.recv(self.PACK_SIZE)
+                if not data:
+                    break
                 file.write(data)
                 self.partNumber += 1
 
     def finishRecive(self):
         self.save()
-        if self.checkIfFileCurrect():
-            os.remove(self.fileName + ".fileDat")
-        else:
-            self.partNumber = 0
-            self.save()
+        if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
+            if self.checkIfFileCurrect():
+                os.remove(self.fileName + ".fileDat")
+            else:
+                self.partNumber = 0
+                self.save()
 
     def loadFileData(self):
         try:
-            with open(self.fileName + ".fileDat", 'r+b') as f:
-                pass
+            f = open(self.fileName + ".fileDat", 'r+b')
         except FileNotFoundError:
             return False
         else:
             self.fileData = f
-            fileData = pickle.load(f, pickle.HIGHEST_PROTOCOL)
-            self.fileSize = fileData.hashSize
+            fileData = pickle.load(f)
+            self.fileSize = fileData.fileHash
             self.fileHash = fileData.fileHash
             self.partNumber = fileData.partNumber
             return True
@@ -87,10 +108,16 @@ class File:
         return self.isFinished
 
     def sendFile(self, conn):
-        filePart=conn.recv(self.PACK_SIZE)
-        maxPart=self.fileSize/self.PACK_SIZE+1
-        if  filePart<maxPart:
-            with open(self.fileName,'rb') as file:
-                file.seek(filePart*self.PACK_SIZE)
-                data=file.read(self.PACK_SIZE)
-                conn.send(data)
+        filePart = Util.recvInt(conn.recv(self.PACK_SIZE))
+        Util.recv(conn)
+        maxPart = math.ceil(self.fileSize / self.PACK_SIZE)
+        if filePart < maxPart:
+            with open(self.fileName, 'rb') as file:
+                file.seek(filePart * self.PACK_SIZE)
+                while True:
+                    data = file.read(self.PACK_SIZE)
+                    if not data:
+                        break
+                    filePart += 1
+                    conn.send(data)
+        print(filePart)

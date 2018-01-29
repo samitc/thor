@@ -6,7 +6,7 @@ class Hash:
         self.h = hashlib.sha512()
 
     def calculateHash(self):
-        return self.h.hexdigest()
+        return self.h.digest()
 
     def update(self, data):
         self.h.update(data)
