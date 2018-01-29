@@ -1,4 +1,6 @@
 import socket
+from threading import Lock
+
 import Util
 import File
 import os
@@ -8,7 +10,8 @@ from Hash import Hash
 
 ZERO_HASH = Hash().calculateHash()
 PACK_SIZE = 1024
-
+gLock=Lock()
+filesLock=dict()
 
 class ClientHandle:
     def __init__(self, conn: socket.socket, args: ArgsParser):
@@ -66,7 +69,7 @@ class ClientHandle:
     def recvFiles(self):
         fileHash = self.conn.recv(PACK_SIZE)
         Util.recv(self.conn)
-        while fileHash != ZERO_HASH:
+        while fileHash != ZERO_HASH and fileHash!=b'':
             fileName = Util.recvString(self.conn.recv(PACK_SIZE))
             Util.recv(self.conn)
             fileSize = Util.recvInt(self.conn.recv(PACK_SIZE))
@@ -76,7 +79,16 @@ class ClientHandle:
                 file = File.File(fileName, PACK_SIZE)
                 file.create(fileSize, fileHash)
                 self.files[file.fileHash] = file
+            gLock.acquire()
             try:
+                lock=filesLock[fileName]
+            except KeyError:
+                lock=Lock()
+                filesLock[fileName]=lock
+            lock.acquire()
+            gLock.release()
+            try:
+                file.load()
                 file.sendState(self.conn)
                 if not file.isFileComplete():
                     file.reciveFile(self.conn)
@@ -84,6 +96,8 @@ class ClientHandle:
             except:
                 file.panic()
                 raise
+            finally:
+                lock.release()
             fileHash = self.conn.recv(PACK_SIZE)
             Util.recv(self.conn)
 

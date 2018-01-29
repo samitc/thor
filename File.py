@@ -69,14 +69,18 @@ class File:
         Util.send(conn)
 
     def reciveFile(self, conn):
+        data=bytearray()
         with open(self.fileName, 'ab') as file:
-            for _ in range(self.partNumber, int(math.ceil(self.fileSize / self.PACK_SIZE))):
-                data = conn.recv(self.PACK_SIZE)
-                if not data:
+            maxPart=int(math.ceil(self.fileSize / self.PACK_SIZE))
+            while self.partNumber<maxPart:
+                dataT = conn.recv(self.PACK_SIZE-len(data))
+                if not dataT:
                     break
-                file.write(data)
-                self.partNumber += 1
-
+                data+=dataT
+                if len(data)==self.PACK_SIZE:
+                    file.write(data)
+                    self.partNumber += 1
+                    data=bytearray()
     def finishRecive(self):
         self.save()
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
@@ -116,4 +120,3 @@ class File:
                         break
                     filePart += 1
                     conn.send(data)
-        print(filePart)
