@@ -18,7 +18,6 @@ class File:
         self.fileName = fileName
         self.isFinished = False
         self.PACK_SIZE = PACK_SIZE
-        self.fileData = None
 
     def load(self):
         if not self.loadFileData():
@@ -53,21 +52,17 @@ class File:
         if not self.loadFileData():
             self.fileHash = fileHash
             self.fileSize = fileSize
-            self.fileData = open(self.fileName + ".fileDat", 'w+b')
             self.partNumber = 0
-            self.fileData.seek(0)
-            pickle.dump(FileData(fileHash, fileSize, 0), self.fileData, pickle.HIGHEST_PROTOCOL)
+            with open(self.fileName + ".fileDat", 'wb') as f:
+                pickle.dump(FileData(fileHash, fileSize, self.partNumber), f, pickle.HIGHEST_PROTOCOL)
 
     def save(self):
-        if self.fileData is not None:
-            if not self.isFinished:
-                pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber), self.fileData,
-                            pickle.HIGHEST_PROTOCOL)
+        if not self.isFinished:
+            with open(self.fileName + ".fileDat", 'wb') as f:
+                pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber), f, pickle.HIGHEST_PROTOCOL)
 
     def panic(self):
-        if self.fileData is not None:
-            self.save()
-            self.fileData.close()
+        self.save()
 
     def sendState(self, conn):
         conn.send(Util.sendInt(self.partNumber))
@@ -75,7 +70,7 @@ class File:
 
     def reciveFile(self, conn):
         with open(self.fileName, 'ab') as file:
-            for _ in range(int(math.ceil(self.fileSize / self.PACK_SIZE))):
+            for _ in range(self.partNumber, int(math.ceil(self.fileSize / self.PACK_SIZE))):
                 data = conn.recv(self.PACK_SIZE)
                 if not data:
                     break
@@ -87,6 +82,7 @@ class File:
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
             if self.checkIfFileCurrect():
                 os.remove(self.fileName + ".fileDat")
+                self.isFinished = True
             else:
                 self.partNumber = 0
                 self.save()
@@ -97,11 +93,11 @@ class File:
         except FileNotFoundError:
             return False
         else:
-            self.fileData = f
             fileData = pickle.load(f)
-            self.fileSize = fileData.fileHash
+            self.fileSize = fileData.fileSize
             self.fileHash = fileData.fileHash
             self.partNumber = fileData.partNumber
+            f.close()
             return True
 
     def isFileComplete(self):
