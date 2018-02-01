@@ -92,6 +92,7 @@ class File:
                 os.remove(self.fileName + ".fileDat")
                 self.isFinished = True
             else:
+                os.rename(self.fileName,self.fileName+".notGood")
                 self.partNumber = 0
                 self.save()
 
