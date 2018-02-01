@@ -69,18 +69,22 @@ class File:
         Util.send(conn)
 
     def reciveFile(self, conn):
-        data=bytearray()
+        data = bytearray()
+        maxPart = int(math.ceil(self.fileSize / self.PACK_SIZE))
+        packSize = self.PACK_SIZE if maxPart > 1 else self.fileSize
         with open(self.fileName, 'ab') as file:
-            maxPart=int(math.ceil(self.fileSize / self.PACK_SIZE))
-            while self.partNumber<maxPart:
-                dataT = conn.recv(self.PACK_SIZE-len(data))
+            while self.partNumber < maxPart:
+                dataT = conn.recv(packSize - len(data))
                 if not dataT:
                     break
-                data+=dataT
-                if len(data)==self.PACK_SIZE:
+                data += dataT
+                if len(data) == packSize:
                     file.write(data)
                     self.partNumber += 1
-                    data=bytearray()
+                    data = bytearray()
+                    if self.partNumber + 1 == maxPart:
+                        packSize = self.fileSize - self.PACK_SIZE * self.partNumber
+
     def finishRecive(self):
         self.save()
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):

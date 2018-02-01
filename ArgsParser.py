@@ -4,15 +4,17 @@ import os
 
 class ArgsParser:
     def __init__(self):
-        parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('-u', action='store', dest='url', help='address of remote computer', default='127.0.0.1')
-        parser.add_argument('-p', action='store', dest='port', type=int, help='port of remove computer',
-                            default='10000')
-        parser.add_argument('-s', action='store_true', dest='send', help='send file to remote computer', default=False)
-        parser.add_argument('-r', action='store_true', dest='recv', help='recived file from remote computer',
-                            default=False)
-        parser.add_argument('-f', action='append', dest='files', help='add file to send', default=[])
-        self.result = parser.parse_args()
+        self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        self.parser.add_argument('-u', action='store', dest='url', help='address of remote computer',
+                                 default='127.0.0.1')
+        self.parser.add_argument('-p', action='store', dest='port', type=int, help='port of remove computer',
+                                 default='10000')
+        self.parser.add_argument('-s', action='store_true', dest='send', help='send file to remote computer',
+                                 default=False)
+        self.parser.add_argument('-r', action='store_true', dest='recv', help='recived file from remote computer',
+                                 default=False)
+        self.parser.add_argument('-f', action='append', dest='files', help='add file to send', default=[])
+        self.result = self.parser.parse_args()
         self.error = ""
         self.__validate__()
 
@@ -27,6 +29,7 @@ class ArgsParser:
     def validate(self):
         if self.error != "":
             print(self.error)
+            self.parser.print_help()
             return False
         return True
 
