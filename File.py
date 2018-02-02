@@ -19,32 +19,34 @@ class File:
         self.isFinished = False
         self.PACK_SIZE = PACK_SIZE
 
-    def load(self):
-        if not self.loadFileData():
+    def calcHashAndSize(self):
+        if os._exists(self.fileName + ".fileDat.c"):
+            with open(self.fileName + ".fileDat.c", 'rb') as f:
+                fd = pickle.load(f)
+        else:
             h = Hash()
             BUF_SIZE = 65536
-            self.fileSize = 0
+            fileSize = 0
             with open(self.fileName, 'rb') as f:
                 while True:
                     data = f.read(BUF_SIZE)
                     if not data:
                         break
                     h.update(data)
-                    self.fileSize += len(data)
-            self.fileHash = h.calculateHash()
+                    fileSize += len(data)
+            fd = FileData(h.calculateHash(), fileSize, -1)
+            with open(self.fileName + ".fileDat.c", 'wb') as f:
+                pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
+        return fd.fileHash, fd.fileSize
+
+    def load(self):
+        if not self.loadFileData():
+            self.fileHash, self.fileSize = self.calcHashAndSize()
             self.isFinished = True
             self.partNumber = math.ceil(self.fileSize / self.PACK_SIZE)
 
     def checkIfFileCurrect(self):
-        h = Hash()
-        BUF_SIZE = 65536
-        with open(self.fileName, 'rb') as f:
-            while True:
-                data = f.read(BUF_SIZE)
-                if not data:
-                    break
-                h.update(data)
-        fileHash = h.calculateHash()
+        fileHash, fs = self.calcHashAndSize()
         return self.fileHash == fileHash
 
     def create(self, fileSize, fileHash):
@@ -71,7 +73,7 @@ class File:
     def reciveFile(self, conn):
         data = bytearray()
         maxPart = int(math.ceil(self.fileSize / self.PACK_SIZE))
-        packSize = self.PACK_SIZE if maxPart > 1 else self.fileSize
+        packSize = self.fileSize - self.PACK_SIZE * self.partNumber if self.partNumber + 1 == maxPart else self.PACK_SIZE
         with open(self.fileName, 'ab') as file:
             while self.partNumber < maxPart:
                 dataT = conn.recv(packSize - len(data))
@@ -90,9 +92,12 @@ class File:
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
             if self.checkIfFileCurrect():
                 os.remove(self.fileName + ".fileDat")
+                os.remove(self.fileName + ".fileDat.c")
                 self.isFinished = True
             else:
-                os.rename(self.fileName,self.fileName+".notGood")
+                os.rename(self.fileName, self.fileName + ".notGood")
+                os.remove(self.fileName + ".fileDat")
+                os.remove(self.fileName + ".fileDat.c")
                 self.partNumber = 0
                 self.save()
 
