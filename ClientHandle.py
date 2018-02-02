@@ -10,8 +10,9 @@ from Hash import Hash
 
 ZERO_HASH = Hash().calculateHash()
 PACK_SIZE = 1024
-gLock=Lock()
-filesLock=dict()
+gLock = Lock()
+filesLock = dict()
+
 
 class ClientHandle:
     def __init__(self, conn: socket.socket, args: ArgsParser):
@@ -69,7 +70,7 @@ class ClientHandle:
     def recvFiles(self):
         fileHash = self.conn.recv(PACK_SIZE)
         Util.recv(self.conn)
-        while fileHash != ZERO_HASH and fileHash!=b'':
+        while fileHash != ZERO_HASH and fileHash != b'':
             fileName = Util.recvString(self.conn.recv(PACK_SIZE))
             Util.recv(self.conn)
             fileSize = Util.recvInt(self.conn.recv(PACK_SIZE))
@@ -81,10 +82,10 @@ class ClientHandle:
                 self.files[file.fileHash] = file
             gLock.acquire()
             try:
-                lock=filesLock[fileName]
+                lock = filesLock[fileName]
             except KeyError:
-                lock=Lock()
-                filesLock[fileName]=lock
+                lock = Lock()
+                filesLock[fileName] = lock
             lock.acquire()
             gLock.release()
             try:
@@ -122,7 +123,7 @@ class ClientHandle:
             return None
 
     def initFiles(self):
-        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if os.path.isfile(f)]
+        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if (os.path.isfile(f) and "fileDat" not in f)]
         for f in files:
             f.load()
             self.files[f.fileHash] = f

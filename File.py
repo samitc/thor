@@ -20,7 +20,7 @@ class File:
         self.PACK_SIZE = PACK_SIZE
 
     def calcHashAndSize(self):
-        if os._exists(self.fileName + ".fileDat.c"):
+        if os.path.isfile(self.fileName + ".fileDat.c"):
             with open(self.fileName + ".fileDat.c", 'rb') as f:
                 fd = pickle.load(f)
         else:
@@ -92,12 +92,10 @@ class File:
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
             if self.checkIfFileCurrect():
                 os.remove(self.fileName + ".fileDat")
-                os.remove(self.fileName + ".fileDat.c")
                 self.isFinished = True
             else:
                 os.rename(self.fileName, self.fileName + ".notGood")
                 os.remove(self.fileName + ".fileDat")
-                os.remove(self.fileName + ".fileDat.c")
                 self.partNumber = 0
                 self.save()
 
