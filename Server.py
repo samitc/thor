@@ -6,6 +6,7 @@ from ClientHandle import ClientHandle
 
 
 def clientCon(conn, args):
+    conn.settimeout(10)
     ch = ClientHandle(conn, args)
     threading.Thread(target=ch.runRecvSend).start()
 
