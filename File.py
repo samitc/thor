@@ -1,9 +1,9 @@
-import os
-from Hash import Hash
-import pickle
-import Util
-import ntpath
 import math
+import os
+import pickle
+
+import Util
+from Hash import Hash
 
 
 class FileData:
@@ -50,7 +50,9 @@ class File:
         return self.fileHash == fileHash
 
     def create(self, fileSize, fileHash):
-        self.fileName = ntpath.basename(self.fileName)
+        dirName = os.path.dirname(self.fileName)
+        if dirName != "":
+            os.makedirs(dirName, exist_ok=True)
         if not self.loadFileData():
             self.fileHash = fileHash
             self.fileSize = fileSize

@@ -1,10 +1,10 @@
+import ntpath
+import os
 import socket
 from threading import Lock
 
-import Util
 import File
-import os
-
+import Util
 from ArgsParser import ArgsParser
 from Hash import Hash
 
@@ -75,7 +75,7 @@ class ClientHandle:
             Util.recv(self.conn)
             fileSize = Util.recvInt(self.conn.recv(PACK_SIZE))
             Util.recv(self.conn)
-            file = self.checkFileExists(fileName, fileSize, fileHash)
+            file = self.checkFileExists(fileHash)
             if file is None:
                 file = File.File(fileName, PACK_SIZE)
                 file.create(fileSize, fileHash)
@@ -104,26 +104,21 @@ class ClientHandle:
 
     def sendFiles(self):
         for f in self.args.getFiles():
-            file = File.File(f, PACK_SIZE)
-            file.load()
-            self.conn.send(file.fileHash)
-            Util.send(self.conn)
-            self.conn.send(Util.sendString(file.fileName))
-            Util.send(self.conn)
-            self.conn.send(Util.sendInt(file.fileSize))
-            Util.send(self.conn)
-            file.sendFile(self.conn)
+            if ClientHandle.isFileForTransfer(f):
+                self.sendFile(f, ntpath.basename(f))
+            else:
+                self.sendAllFiles(f)
         self.conn.send(ZERO_HASH)
         Util.send(self.conn)
 
-    def checkFileExists(self, fileName, fileSize, fileHash):
+    def checkFileExists(self, fileHash):
         try:
             return self.files[fileHash]
         except KeyError:
             return None
 
     def initFiles(self):
-        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if (os.path.isfile(f) and "fileDat" not in f)]
+        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if ClientHandle.isFileForTransfer(f)]
         for f in files:
             f.load()
             self.files[f.fileHash] = f
@@ -131,3 +126,32 @@ class ClientHandle:
     def panic(self):
         for f in self.files.values():
             f.panic()
+
+    def sendAllFiles(self, f):
+        if os.path.isdir(f):
+            self.sendDir(f)
+        elif os.path.isfile(f):
+            self.sendFile(f, f)
+        else:
+            print(f"File {f} does not exists.")
+
+    def sendFile(self, filePath, sendFilePath):
+        if ClientHandle.isFileForTransfer(filePath):
+            file = File.File(filePath, PACK_SIZE)
+            file.load()
+            self.conn.send(file.fileHash)
+            Util.send(self.conn)
+            self.conn.send(Util.sendString(sendFilePath))
+            Util.send(self.conn)
+            self.conn.send(Util.sendInt(file.fileSize))
+            Util.send(self.conn)
+            file.sendFile(self.conn)
+
+    def sendDir(self, f):
+        for f1 in os.listdir(f):
+            filePath = os.path.join(f, f1)
+            self.sendAllFiles(filePath)
+
+    @staticmethod
+    def isFileForTransfer(filePath: str):
+        return os.path.isfile(filePath) and "fileDat" not in filePath
