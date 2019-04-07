@@ -7,10 +7,14 @@ from Hash import Hash
 
 
 class FileData:
-    def __init__(self, fileHash, fileSize, partNumber):
+    def __init__(self, fileHash, fileSize, partNumber, accessTimeInNanoSec, modificationTimeInNanoSec,
+                 metaOrCreateTimeInNanoSec):
         self.fileHash = fileHash
         self.fileSize = fileSize
         self.partNumber = partNumber
+        self.accessTimeInNanoSec = accessTimeInNanoSec
+        self.modificationTimeInNanoSec = modificationTimeInNanoSec
+        self.metaOrCreateTimeInNanoSec = metaOrCreateTimeInNanoSec
 
 
 class File:
@@ -18,11 +22,13 @@ class File:
         self.fileName = fileName
         self.isFinished = False
         self.PACK_SIZE = PACK_SIZE
+        self.fileData = FileData(None, None, None, None, None, None)
 
     def calcHashAndSize(self):
         if os.path.isfile(self.fileName + ".fileDat.c"):
             with open(self.fileName + ".fileDat.c", 'rb') as f:
                 fd = pickle.load(f)
+                h, fileSize = fd.fileHash, fd.fileSize
         else:
             h = Hash()
             BUF_SIZE = 65536
@@ -34,14 +40,18 @@ class File:
                         break
                     h.update(data)
                     fileSize += len(data)
-            fd = FileData(h.calculateHash(), fileSize, -1)
-            with open(self.fileName + ".fileDat.c", 'wb') as f:
-                pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
-        return fd.fileHash, fd.fileSize
+            h = h.calculateHash()
+        return h, fileSize
 
     def load(self):
         if not self.loadFileData():
             self.fileHash, self.fileSize = self.calcHashAndSize()
+            fileStat = os.stat(self.fileName)
+            fd = FileData(self.fileHash, self.fileSize, -1, fileStat.st_atime_ns, fileStat.st_mtime_ns,
+                          fileStat.st_ctime_ns)
+            self.fileData = fd
+            with open(self.fileName + ".fileDat.c", 'wb') as f:
+                pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
             self.isFinished = True
             self.partNumber = math.ceil(self.fileSize / self.PACK_SIZE)
 
@@ -49,7 +59,7 @@ class File:
         fileHash, fs = self.calcHashAndSize()
         return self.fileHash == fileHash
 
-    def create(self, fileSize, fileHash):
+    def create(self, fileSize, fileHash, accessTimeInNanoSec, modificationTimeInNanoSec, metaOrCreateTimeInNanoSec):
         dirName = os.path.dirname(self.fileName)
         if dirName != "":
             os.makedirs(dirName, exist_ok=True)
@@ -57,13 +67,18 @@ class File:
             self.fileHash = fileHash
             self.fileSize = fileSize
             self.partNumber = 0
+            self.fileData = FileData(fileHash, fileSize, self.partNumber, accessTimeInNanoSec,
+                                     modificationTimeInNanoSec,
+                                     metaOrCreateTimeInNanoSec)
             with open(self.fileName + ".fileDat", 'wb') as f:
-                pickle.dump(FileData(fileHash, fileSize, self.partNumber), f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(self.fileData, f, pickle.HIGHEST_PROTOCOL)
 
     def save(self):
         if not self.isFinished:
             with open(self.fileName + ".fileDat", 'wb') as f:
-                pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber), f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(FileData(self.fileHash, self.fileSize, self.partNumber, self.fileData.accessTimeInNanoSec,
+                                     self.fileData.modificationTimeInNanoSec, self.fileData.metaOrCreateTimeInNanoSec),
+                            f, pickle.HIGHEST_PROTOCOL)
 
     def panic(self):
         self.save()
@@ -94,6 +109,7 @@ class File:
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
             if self.checkIfFileCurrect():
                 os.remove(self.fileName + ".fileDat")
+                os.utime(self.fileName, ns=(self.fileData.accessTimeInNanoSec, self.fileData.modificationTimeInNanoSec))
                 self.isFinished = True
             else:
                 os.rename(self.fileName, self.fileName + ".notGood")
@@ -107,10 +123,10 @@ class File:
         except FileNotFoundError:
             return False
         else:
-            fileData = pickle.load(f)
-            self.fileSize = fileData.fileSize
-            self.fileHash = fileData.fileHash
-            self.partNumber = fileData.partNumber
+            self.fileData = pickle.load(f)
+            self.fileSize = self.fileData.fileSize
+            self.fileHash = self.fileData.fileHash
+            self.partNumber = self.fileData.partNumber
             f.close()
             return True
 

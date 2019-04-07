@@ -67,18 +67,26 @@ class ClientHandle:
                 raise
         self.conn.close()
 
+    def recvInt(self):
+        val = Util.recvInt(self.conn.recv(PACK_SIZE))
+        Util.recv(self.conn)
+        return val
+
     def recvFiles(self):
         fileHash = self.conn.recv(PACK_SIZE)
         Util.recv(self.conn)
         while fileHash != ZERO_HASH and fileHash != b'':
             fileName = Util.recvString(self.conn.recv(PACK_SIZE))
             Util.recv(self.conn)
-            fileSize = Util.recvInt(self.conn.recv(PACK_SIZE))
-            Util.recv(self.conn)
+            fileSize = self.recvInt()
+            accessTimeInNanoSec = self.recvInt()
+            modificationTimeInNanoSec = self.recvInt()
+            metaOrCreateTimeInNanoSec = self.recvInt()
             file = self.checkFileExists(fileHash)
             if file is None:
                 file = File.File(fileName, PACK_SIZE)
-                file.create(fileSize, fileHash)
+                file.create(fileSize, fileHash, accessTimeInNanoSec, modificationTimeInNanoSec,
+                            metaOrCreateTimeInNanoSec)
                 self.files[file.fileHash] = file
             gLock.acquire()
             try:
@@ -135,6 +143,10 @@ class ClientHandle:
         else:
             print(f"File {f} does not exists.")
 
+    def sendInt(self, val):
+        self.conn.send(Util.sendInt(val))
+        Util.send(self.conn)
+
     def sendFile(self, filePath, sendFilePath):
         if ClientHandle.isFileForTransfer(filePath):
             file = File.File(filePath, PACK_SIZE)
@@ -143,8 +155,10 @@ class ClientHandle:
             Util.send(self.conn)
             self.conn.send(Util.sendString(sendFilePath))
             Util.send(self.conn)
-            self.conn.send(Util.sendInt(file.fileSize))
-            Util.send(self.conn)
+            self.sendInt(file.fileSize)
+            self.sendInt(file.fileData.accessTimeInNanoSec)
+            self.sendInt(file.fileData.modificationTimeInNanoSec)
+            self.sendInt(file.fileData.metaOrCreateTimeInNanoSec)
             file.sendFile(self.conn)
 
     def sendDir(self, f):
