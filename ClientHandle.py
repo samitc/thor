@@ -18,7 +18,6 @@ class ClientHandle:
         self.conn = conn
         self.args = args
         self.files = dict()
-        self.initFiles()
 
     def runSendRecv(self):
         self.conn.send(Util.sendBool(self.args.getIsSend()))
@@ -29,6 +28,7 @@ class ClientHandle:
         Util.recv(self.conn)
         self.isRecvClient = Util.recvBool(self.conn.recv(1))
         Util.recv(self.conn)
+        self.initFiles()
         if self.isRecvClient and self.args.getIsSend():
             try:
                 self.sendFiles()
@@ -52,6 +52,7 @@ class ClientHandle:
         Util.send(self.conn)
         self.conn.send(Util.sendBool(self.args.getIsRecv()))
         Util.send(self.conn)
+        self.initFiles()
         if self.isSendClient and self.args.getIsRecv():
             try:
                 self.recvFiles()
