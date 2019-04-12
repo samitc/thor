@@ -2,13 +2,12 @@ import ntpath
 import os
 import socket
 from threading import Lock
-
 import File
 import Util
 from ArgsParser import ArgsParser
 from Hash import Hash
 
-ZERO_HASH = Hash().calculateHash()
+ZERO_HASH = b"0000000000000000000000000000000000000000000000000000000000000000"
 PACK_SIZE = 1024
 gLock = Lock()
 filesLock = dict()
@@ -82,12 +81,24 @@ class ClientHandle:
             accessTimeInNanoSec = self.recvInt()
             modificationTimeInNanoSec = self.recvInt()
             metaOrCreateTimeInNanoSec = self.recvInt()
-            file = self.checkFileExists(fileHash)
-            if file is None:
+            files = self.checkFileExists(fileHash)
+            if files is None:
                 file = File.File(fileName, PACK_SIZE)
                 file.create(fileSize, fileHash, accessTimeInNanoSec, modificationTimeInNanoSec,
                             metaOrCreateTimeInNanoSec)
-                self.files[file.fileHash] = file
+                self.files[file.fileHash] = [file]
+            else:
+                file = None
+                for f in files:
+                    if f.fileName == fileName:
+                        file = f
+                if file is None:
+                    file = File.File(fileName, PACK_SIZE)
+                    file.create(fileSize, fileHash, accessTimeInNanoSec, modificationTimeInNanoSec,
+                                metaOrCreateTimeInNanoSec)
+                    ClientHandle.migrate(files[0], file)
+                    file.save()
+                    self.files[file.fileHash].append(file)
             gLock.acquire()
             try:
                 lock = filesLock[fileName]
@@ -126,14 +137,16 @@ class ClientHandle:
             return None
 
     def initFiles(self):
-        files = [File.File(f, PACK_SIZE) for f in os.listdir('.') if ClientHandle.isFileForTransfer(f)]
+        files = [File.File(f, PACK_SIZE) for f in os.listdir(
+            '.') if ClientHandle.isFileForTransfer(f)]
         for f in files:
             f.load()
-            self.files[f.fileHash] = f
+            self.files[f.fileHash] = [f]
 
     def panic(self):
-        for f in self.files.values():
-            f.panic()
+        for files in self.files.values():
+            for f in files:
+                f.panic()
 
     def sendAllFiles(self, f):
         if os.path.isdir(f):
@@ -169,3 +182,20 @@ class ClientHandle:
     @staticmethod
     def isFileForTransfer(filePath: str):
         return os.path.isfile(filePath) and "fileDat" not in filePath
+
+    @staticmethod
+    def migrate(f1: File, f2: File):
+        if f1.partNumber == f2.partNumber:
+            return
+        if f1.partNumber > f2.partNumber:
+            bf = f1
+            sf = f2
+        else:
+            bf = f2
+            sf = f1
+        with open(sf.fileName, "ab") as sfs:
+            with open(bf.fileName, "rb") as bfs:
+                numOfParts = bf.partNumber - sf.partNumber
+                bfs.seek(sf.partNumber * PACK_SIZE)
+                sfs.write(bfs.read(numOfParts*PACK_SIZE))
+                sf.partNumber += numOfParts
