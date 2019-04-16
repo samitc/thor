@@ -108,7 +108,6 @@ class File:
         self.save()
         if self.partNumber == math.ceil(self.fileSize / self.PACK_SIZE):
             if self.checkIfFileCurrect():
-                os.remove(self.fileName + ".fileDat")
                 os.utime(self.fileName, ns=(self.fileData.accessTimeInNanoSec, self.fileData.modificationTimeInNanoSec))
                 self.isFinished = True
             else:
