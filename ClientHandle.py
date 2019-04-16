@@ -24,47 +24,43 @@ class ClientHandle:
         Util.send(self.conn)
         self.conn.send(Util.sendBool(self.args.getIsRecv()))
         Util.send(self.conn)
-        self.isSendClient = Util.recvBool(self.conn.recv(1))
-        Util.recv(self.conn)
-        self.isRecvClient = Util.recvBool(self.conn.recv(1))
-        Util.recv(self.conn)
-        self.initFiles()
-        if self.isRecvClient and self.args.getIsSend():
-            try:
-                self.sendFiles()
-            except:
-                self.conn.close()
-                raise
-        if self.isSendClient and self.args.getIsRecv():
-            try:
-                self.recvFiles()
-            except:
-                self.conn.close()
-                raise
+        valid, self.isSendClient, self.isRecvClient = ClientHandle.doHandshake(
+            self.conn)
+        if valid:
+            if self.isRecvClient and self.args.getIsSend():
+                try:
+                    self.sendFiles()
+                except:
+                   self.conn.close()
+                   raise
+            if self.isSendClient and self.args.getIsRecv():
+                try:
+                   self.recvFiles()
+                except:
+                   self.conn.close()
+                   raise
         self.conn.close()
 
     def runRecvSend(self):
-        self.isSendClient = Util.recvBool(self.conn.recv(1))
-        Util.recv(self.conn)
-        self.isRecvClient = Util.recvBool(self.conn.recv(1))
-        Util.recv(self.conn)
-        self.conn.send(Util.sendBool(self.args.getIsSend()))
-        Util.send(self.conn)
-        self.conn.send(Util.sendBool(self.args.getIsRecv()))
-        Util.send(self.conn)
-        self.initFiles()
-        if self.isSendClient and self.args.getIsRecv():
-            try:
-                self.recvFiles()
-            except:
-                self.conn.close()
-                raise
-        if self.isRecvClient and self.args.getIsSend():
-            try:
-                self.sendFiles()
-            except:
-                self.conn.close()
-                raise
+        valid, self.isSendClient, self.isRecvClient = ClientHandle.doHandshake(
+            self.conn)
+        if valid:
+          self.conn.send(Util.sendBool(self.args.getIsSend()))
+          Util.send(self.conn)
+          self.conn.send(Util.sendBool(self.args.getIsRecv()))
+          Util.send(self.conn)
+          if self.isSendClient and self.args.getIsRecv():
+              try:
+                  self.recvFiles()
+              except:
+                  self.conn.close()
+                  raise
+          if self.isRecvClient and self.args.getIsSend():
+              try:
+                  self.sendFiles()
+              except:
+                  self.conn.close()
+                  raise
         self.conn.close()
 
     def recvInt(self):
@@ -137,13 +133,6 @@ class ClientHandle:
         except KeyError:
             return None
 
-    def initFiles(self):
-        files = [File.File(f, PACK_SIZE) for f in os.listdir(
-            '.') if ClientHandle.isFileForTransfer(f)]
-        for f in files:
-            f.load()
-            self.files[f.fileHash] = [f]
-
     def panic(self):
         for files in self.files.values():
             for f in files:
@@ -200,3 +189,14 @@ class ClientHandle:
                 bfs.seek(sf.partNumber * PACK_SIZE)
                 sfs.write(bfs.read(numOfParts*PACK_SIZE))
                 sf.partNumber += numOfParts
+    @staticmethod
+    def doHandshake(conn):
+        packOne=conn.recv(1)
+        Util.recv(conn)
+        packTwo = conn.recv(1)
+        Util.recv(conn)
+        if packOne==b'' or packTwo==b'':
+            return False,False,False
+        bOne=Util.recvBool(packOne)
+        bTwo=Util.recvBool(packTwo)
+        return bOne|bTwo,bOne,bTwo

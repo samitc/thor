@@ -25,8 +25,8 @@ class File:
         self.fileData = FileData(None, None, None, None, None, None)
 
     def calcHashAndSize(self):
-        if os.path.isfile(self.fileName + ".fileDat.c"):
-            with open(self.fileName + ".fileDat.c", 'rb') as f:
+        if os.path.isfile(self.fileName + ".fileDat"):
+            with open(self.fileName + ".fileDat", 'rb') as f:
                 fd = pickle.load(f)
                 h, fileSize = fd.fileHash, fd.fileSize
         else:
@@ -50,7 +50,7 @@ class File:
             fd = FileData(self.fileHash, self.fileSize, -1, fileStat.st_atime_ns, fileStat.st_mtime_ns,
                           fileStat.st_ctime_ns)
             self.fileData = fd
-            with open(self.fileName + ".fileDat.c", 'wb') as f:
+            with open(self.fileName + ".fileDat", 'wb') as f:
                 pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
             self.isFinished = True
             self.partNumber = math.ceil(self.fileSize / self.PACK_SIZE)
