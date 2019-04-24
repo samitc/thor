@@ -5,7 +5,6 @@ from threading import Lock
 import File
 import Util
 from ArgsParser import ArgsParser
-from Hash import Hash
 
 ZERO_HASH = b"0000000000000000000000000000000000000000000000000000000000000000"
 PACK_SIZE = 1024
@@ -20,10 +19,8 @@ class ClientHandle:
         self.files = dict()
 
     def runSendRecv(self):
-        self.conn.send(Util.sendBool(self.args.getIsSend()))
-        Util.send(self.conn)
-        self.conn.send(Util.sendBool(self.args.getIsRecv()))
-        Util.send(self.conn)
+        Util.sendBool(self.conn, self.args.getIsSend())
+        Util.sendBool(self.conn, self.args.getIsRecv())
         valid, self.isSendClient, self.isRecvClient = ClientHandle.doHandshake(
             self.conn)
         if valid:
@@ -31,53 +28,44 @@ class ClientHandle:
                 try:
                     self.sendFiles()
                 except:
-                   self.conn.close()
-                   raise
+                    self.conn.close()
+                    raise
             if self.isSendClient and self.args.getIsRecv():
                 try:
-                   self.recvFiles()
+                    self.recvFiles()
                 except:
-                   self.conn.close()
-                   raise
+                    self.conn.close()
+                    raise
         self.conn.close()
 
     def runRecvSend(self):
         valid, self.isSendClient, self.isRecvClient = ClientHandle.doHandshake(
             self.conn)
         if valid:
-          self.conn.send(Util.sendBool(self.args.getIsSend()))
-          Util.send(self.conn)
-          self.conn.send(Util.sendBool(self.args.getIsRecv()))
-          Util.send(self.conn)
-          if self.isSendClient and self.args.getIsRecv():
-              try:
-                  self.recvFiles()
-              except:
-                  self.conn.close()
-                  raise
-          if self.isRecvClient and self.args.getIsSend():
-              try:
-                  self.sendFiles()
-              except:
-                  self.conn.close()
-                  raise
+            Util.sendBool(self.conn, self.args.getIsSend())
+            Util.sendBool(self.conn, self.args.getIsRecv())
+            if self.isSendClient and self.args.getIsRecv():
+                try:
+                    self.recvFiles()
+                except:
+                    self.conn.close()
+                    raise
+            if self.isRecvClient and self.args.getIsSend():
+                try:
+                    self.sendFiles()
+                except:
+                    self.conn.close()
+                    raise
         self.conn.close()
 
-    def recvInt(self):
-        val = Util.recvInt(self.conn.recv(PACK_SIZE))
-        Util.recv(self.conn)
-        return val
-
     def recvFiles(self):
-        fileHash = self.conn.recv(PACK_SIZE)
-        Util.recv(self.conn)
+        fileHash = Util.recvHash(self.conn, len(ZERO_HASH))
         while fileHash != ZERO_HASH and fileHash != b'':
-            fileName = Util.recvString(self.conn.recv(PACK_SIZE))
-            Util.recv(self.conn)
-            fileSize = self.recvInt()
-            accessTimeInNanoSec = self.recvInt()
-            modificationTimeInNanoSec = self.recvInt()
-            metaOrCreateTimeInNanoSec = self.recvInt()
+            fileName = Util.recvString(self.conn)
+            fileSize = Util.recvInt(self.conn)
+            accessTimeInNanoSec = Util.recvInt(self.conn)
+            modificationTimeInNanoSec = Util.recvInt(self.conn)
+            metaOrCreateTimeInNanoSec = Util.recvInt(self.conn)
             files = self.checkFileExists(fileHash)
             if files is None:
                 file = File.File(fileName, PACK_SIZE)
@@ -115,8 +103,7 @@ class ClientHandle:
                 raise
             finally:
                 lock.release()
-            fileHash = self.conn.recv(PACK_SIZE)
-            Util.recv(self.conn)
+            fileHash = Util.recvHash(self.conn, len(ZERO_HASH))
 
     def sendFiles(self):
         for f in self.args.getFiles():
@@ -124,8 +111,7 @@ class ClientHandle:
                 self.sendFile(f, ntpath.basename(f))
             else:
                 self.sendAllFiles(f)
-        self.conn.send(ZERO_HASH)
-        Util.send(self.conn)
+        Util.sendHash(self.conn, ZERO_HASH, len(ZERO_HASH))
 
     def checkFileExists(self, fileHash):
         try:
@@ -146,22 +132,16 @@ class ClientHandle:
         else:
             print(f"File {f} does not exists.")
 
-    def sendInt(self, val):
-        self.conn.send(Util.sendInt(val))
-        Util.send(self.conn)
-
     def sendFile(self, filePath, sendFilePath):
         if ClientHandle.isFileForTransfer(filePath):
             file = File.File(filePath, PACK_SIZE)
             file.load()
-            self.conn.send(file.fileHash)
-            Util.send(self.conn)
-            self.conn.send(Util.sendString(sendFilePath))
-            Util.send(self.conn)
-            self.sendInt(file.fileSize)
-            self.sendInt(file.fileData.accessTimeInNanoSec)
-            self.sendInt(file.fileData.modificationTimeInNanoSec)
-            self.sendInt(file.fileData.metaOrCreateTimeInNanoSec)
+            Util.sendHash(self.conn, file.fileHash, len(ZERO_HASH))
+            Util.sendString(self.conn, sendFilePath)
+            Util.sendInt(self.conn, file.fileSize)
+            Util.sendInt(self.conn, file.fileData.accessTimeInNanoSec)
+            Util.sendInt(self.conn, file.fileData.modificationTimeInNanoSec)
+            Util.sendInt(self.conn, file.fileData.metaOrCreateTimeInNanoSec)
             file.sendFile(self.conn)
 
     def sendDir(self, f):
@@ -187,16 +167,11 @@ class ClientHandle:
             with open(bf.fileName, "rb") as bfs:
                 numOfParts = bf.partNumber - sf.partNumber
                 bfs.seek(sf.partNumber * PACK_SIZE)
-                sfs.write(bfs.read(numOfParts*PACK_SIZE))
+                sfs.write(bfs.read(numOfParts * PACK_SIZE))
                 sf.partNumber += numOfParts
+
     @staticmethod
     def doHandshake(conn):
-        packOne=conn.recv(1)
-        Util.recv(conn)
-        packTwo = conn.recv(1)
-        Util.recv(conn)
-        if packOne==b'' or packTwo==b'':
-            return False,False,False
-        bOne=Util.recvBool(packOne)
-        bTwo=Util.recvBool(packTwo)
-        return bOne|bTwo,bOne,bTwo
+        bOne = Util.recvBool(conn)
+        bTwo = Util.recvBool(conn)
+        return bOne | bTwo, bOne, bTwo

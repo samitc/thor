@@ -84,8 +84,7 @@ class File:
         self.save()
 
     def sendState(self, conn):
-        conn.send(Util.sendInt(self.partNumber))
-        Util.send(conn)
+        Util.sendInt(conn, self.partNumber)
 
     def reciveFile(self, conn):
         data = bytearray()
@@ -133,8 +132,7 @@ class File:
         return self.isFinished
 
     def sendFile(self, conn):
-        filePart = Util.recvInt(conn.recv(self.PACK_SIZE))
-        Util.recv(conn)
+        filePart = Util.recvInt(conn)
         maxPart = math.ceil(self.fileSize / self.PACK_SIZE)
         if filePart < maxPart:
             with open(self.fileName, 'rb') as file:
