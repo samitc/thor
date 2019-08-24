@@ -50,8 +50,13 @@ class File:
             fd = FileData(self.fileHash, self.fileSize, -1, fileStat.st_atime_ns, fileStat.st_mtime_ns,
                           fileStat.st_ctime_ns)
             self.fileData = fd
-            with open(self.fileName + ".fileDat", 'wb') as f:
-                pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
+            fileDatName = self.fileName + ".fileDat"
+            try:
+                with open(fileDatName, 'wb') as f:
+                    pickle.dump(fd, f, pickle.HIGHEST_PROTOCOL)
+            except:
+                print(f"WARN:can not create {fileDatName}")
+                pass
             self.isFinished = True
             self.partNumber = math.ceil(self.fileSize / self.PACK_SIZE)
 
@@ -117,16 +122,15 @@ class File:
 
     def loadFileData(self):
         try:
-            f = open(self.fileName + ".fileDat", 'r+b')
+            with open(self.fileName + ".fileDat", "rb") as f:
+                self.fileData = pickle.load(f)
+                self.fileSize = self.fileData.fileSize
+                self.fileHash = self.fileData.fileHash
+                self.partNumber = self.fileData.partNumber
+                f.close()
+                return True
         except FileNotFoundError:
             return False
-        else:
-            self.fileData = pickle.load(f)
-            self.fileSize = self.fileData.fileSize
-            self.fileHash = self.fileData.fileHash
-            self.partNumber = self.fileData.partNumber
-            f.close()
-            return True
 
     def isFileComplete(self):
         return self.isFinished
